@@ -164,6 +164,15 @@ async def main() -> None:
         default=1500,
         help="Milliseconds of audio from before a local detection to send",
     )
+    parser.add_argument(
+        "--wake-word-threshold",
+        type=float,
+        help=(
+            "Probability a local detection needs, over the model's own"
+            " cutoff. Lower fires more often, which is the point when"
+            " something downstream is verifying"
+        ),
+    )
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
@@ -189,6 +198,17 @@ async def main() -> None:
             parser.error("--wake-word-buffer-ms must be at least 1")
 
         mww = _load_wake_word(args.local_wake_word)
+
+        if args.wake_word_threshold is not None:
+            if not 0.0 < args.wake_word_threshold < 1.0:
+                parser.error("--wake-word-threshold must be between 0 and 1")
+
+            _LOGGER.info(
+                "Wake word threshold: %.3f (model default %.3f)",
+                args.wake_word_threshold,
+                mww.probability_cutoff,
+            )
+            mww.probability_cutoff = args.wake_word_threshold
 
     bytes_per_chunk = args.samples_per_chunk * SAMPLE_WIDTH
     read_chunk = (
@@ -348,7 +368,7 @@ async def main() -> None:
                         )
                     elif event_type == "wake_word-rejected":
                         _LOGGER.info(
-                            "Rejected: %s (another device just woke up with it)",
+                            "Rejected: %s",
                             msg["event"]["data"]["wake_word_output"][
                                 "wake_word_phrase"
                             ],
